@@ -1,4 +1,4 @@
-# mos15-patcher
+# mos-patcher
 
 Minimal kernel-function-hook framework for macOS — a Lilu replacement built for the **mos** project.
 
@@ -6,7 +6,7 @@ Minimal kernel-function-hook framework for macOS — a Lilu replacement built fo
 
 ## Why this exists
 
-[Lilu](https://github.com/acidanthera/Lilu) is the de facto kernel-patching framework for hackintosh-adjacent work (10–15k LOC, 20+ files, rich C++ class hierarchy). For our use case (the [mos](https://github.com/MattJackson/docker-macos) macOS-in-Docker stack on Sequoia) we hit a Lilu reliability bug at early boot — `onKextLoad` only fires on ~60% of boots for System KC kexts loaded before Lilu's `activate()`. Rather than patch around it, we wrote a smaller framework (~700 LOC across 4 files we own) that solves three things and nothing else:
+[Lilu](https://github.com/acidanthera/Lilu) is the de facto kernel-patching framework for hackintosh-adjacent work (10–15k LOC, 20+ files, rich C++ class hierarchy). For our use case (the [mos](https://github.com/MattJackson/mos-docker) macOS-in-Docker stack on Sequoia) we hit a Lilu reliability bug at early boot — `onKextLoad` only fires on ~60% of boots for System KC kexts loaded before Lilu's `activate()`. Rather than patch around it, we wrote a smaller framework (~700 LOC across 4 files we own) that solves three things and nothing else:
 
 1. **Detect IOService class instantiation.** Register `IOService::addMatchingNotification` on the class name. Every current and future instance is delivered to our callback.
 2. **Look up Mach-O symbols** by mangled name in any loaded kext (Boot KC, System KC, Aux KC) with one universal `__LINKEDIT`-relative resolution formula — no standalone-vs-KC heuristic.
@@ -147,7 +147,7 @@ Built artifact bundle ID: `com.pq.kext.mos15-patcher`. Place under `EFI/OC/Kexts
 
 **v0.5 — usable but barebones.** The framework is **runtime-proven** end-to-end on Sequoia in our VM environment:
 
-- 24/24 IOFramebuffer methods hooked across `IONDRVFramebuffer` + `IOFramebuffer` base, 0 gaps, in [QEMUDisplayPatcher](https://github.com/MattJackson/docker-macos/tree/main/kexts/QEMUDisplayPatcher)
+- 24/24 IOFramebuffer methods hooked across `IONDRVFramebuffer` + `IOFramebuffer` base, 0 gaps, in [QEMUDisplayPatcher](https://github.com/MattJackson/mos-docker/tree/main/kexts/QEMUDisplayPatcher)
 - iMac20,1 EDID injection delivered intact through 2-block `getDDCBlock`
 - 7/8 advertised display modes surface in CoreGraphics (the 8th is blocked by an upstream qemu-mos15 limit, not us)
 - Vtable swap fires on every `IONDRVFramebuffer` instance via the publish-notification path; persistent across container restarts
@@ -162,9 +162,9 @@ Built artifact bundle ID: `com.pq.kext.mos15-patcher`. Place under `EFI/OC/Kexts
 
 ## Part of the mos suite
 
-- [docker-macos](https://github.com/MattJackson/docker-macos) — the orchestration repo. Docker image, build pipeline, OpenCore config, the `QEMUDisplayPatcher` kext that consumes this framework
-- [qemu-mos15](https://github.com/MattJackson/qemu-mos15) — patches to QEMU 10.2.2 (`applesmc`, `vmware_vga`, `dev-hid`)
-- [opencore-mos15](https://github.com/MattJackson/opencore-mos15) — OpenCore config + patches
+- [mos-docker](https://github.com/MattJackson/mos-docker) — the orchestration repo. Docker image, build pipeline, OpenCore config, the `QEMUDisplayPatcher` kext that consumes this framework
+- [mos-qemu](https://github.com/MattJackson/mos-qemu) — patches to QEMU 10.2.2 (`applesmc`, `vmware_vga`, `dev-hid`)
+- [mos-opencore](https://github.com/MattJackson/mos-opencore) — OpenCore config + patches
 
 ## License
 
