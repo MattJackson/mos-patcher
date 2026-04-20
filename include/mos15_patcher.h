@@ -45,8 +45,15 @@ typedef struct mp_route_request {
 /*
  * Preferred path for patching IOService classes.
  *
- *   class_name   : C++ class name (UNMANGLED, e.g. "IONDRVFramebuffer")
- *   reqs         : array of routes; reqs[i].symbol is the mangled method name
+ *   class_name      : C++ class name (UNMANGLED, e.g. "IONDRVFramebuffer")
+ *   kext_bundle_ids : NULL-terminated resolution chain. Element 0 is primary
+ *                     (must be non-NULL). Subsequent non-NULL entries are
+ *                     tried in order when primary lookup misses — this lets
+ *                     callers express arbitrary inheritance chains
+ *                     (e.g. AppleParavirtGPU → IOAcceleratorFamily2 →
+ *                     IOGraphicsFamily). Pass a 2-entry array {primary, NULL}
+ *                     for "primary only, no fallback".
+ *   reqs            : array of routes; reqs[i].symbol is the mangled method name
  *
  * Registers an IOService publish notification. When a matching instance is
  * created, walks its vtable and patches the slots for each route. Always
@@ -55,7 +62,7 @@ typedef struct mp_route_request {
  * Returns 0 on success (notifier registered), negative on error.
  */
 int mp_route_on_publish(const char *class_name,
-                        const char *kext_bundle_id,
+                        const char *const *kext_bundle_ids,
                         mp_route_request_t *reqs,
                         size_t count);
 

@@ -117,11 +117,12 @@ int mp_route_kext(const char *kext_bundle_id,
 
 extern "C"
 int mp_route_on_publish(const char *class_name,
-                        const char *kext_bundle_id,
+                        const char *const *kext_bundle_ids,
                         mp_route_request_t *reqs,
                         size_t count)
 {
-    if (!class_name || !kext_bundle_id || !reqs || count == 0) return -1;
+    if (!class_name || !kext_bundle_ids || !kext_bundle_ids[0] ||
+        !reqs || count == 0) return -1;
 
     /* Convert mp_route_request_t (caller-friendly) to mp_pending_publish_route_t
      * (notify.cpp's internal format). The caller's reqs lifetime must outlive
@@ -142,7 +143,7 @@ int mp_route_on_publish(const char *class_name,
             .org            = reqs[i].org,
         };
     }
-    return notify_register_publish(class_name, kext_bundle_id, base, (int)count);
+    return notify_register_publish(class_name, kext_bundle_ids, base, (int)count);
 }
 
 extern "C"

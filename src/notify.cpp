@@ -46,7 +46,9 @@ enumerate_loaded_kexts(mp_kext_load_callback cb)
  * publishes. We can serve up to MAX_NOTIFIERS distinct classes. */
 struct notifier_state {
     const char                  *class_name;       /* e.g. "IONDRVFramebuffer" */
-    const char                  *kext_bundle_id;   /* e.g. "com.apple.iokit.IONDRVSupport" */
+    /* NULL-terminated resolution chain. Element 0 is primary; subsequent
+     * non-NULL entries are fallback kexts tried in order on primary miss. */
+    const char *const           *kext_bundle_ids;
     mp_pending_publish_route_t  *routes;
     int                          route_count;
     int                          instances_patched;
@@ -77,10 +79,11 @@ on_publish(void *target, void *refCon, IOService *newService, IONotifier *notifi
 
     /* Find the kext by exact bundle ID — no scan-all-kmods (which crashed
      * macho_find_symbol on some kexts with weird mach-o layout). */
-    kmod_info_t *km = find_kmod(st->kext_bundle_id);
+    const char *primary_name = st->kext_bundle_ids ? st->kext_bundle_ids[0] : nullptr;
+    kmod_info_t *km = primary_name ? find_kmod(primary_name) : nullptr;
     if (!km) {
-        IOLog("%s: kext %s not loaded — can't resolve symbols\n",
-              kLog, st->kext_bundle_id);
+        IOLog("%s: primary kext %s not loaded — can't resolve symbols\n",
+              kLog, primary_name ? primary_name : "<null>");
         return true;
     }
 
@@ -110,46 +113,41 @@ on_publish(void *target, void *refCon, IOService *newService, IONotifier *notifi
     bzero(new_vtable, COPY_BYTES);
     memcpy(new_vtable, orig_vtable, COPY_BYTES);
 
-    /* Resolve a mangled name: try the caller-specified kext (overrides live
-     * there), then IOGraphicsFamily (IOFramebuffer base-class methods for
-     * anyone hooking an IONDRVFramebuffer/AppleGraphicsDevicePolicy-style
-     * class). Targeted lookup avoids scanning all 60+ kmods on every
-     * publish, which was flooding IOLog and panicking mid-callback. */
-    kmod_info_t *km_fallback = find_kmod("com.apple.iokit.IOGraphicsFamily");
-    IOLog("%s: primary kext %p (%s), fallback %p (IOGraphicsFamily)\n",
-          kLog, km, km ? km->name : "nil", km_fallback);
-    /* Diagnostic encoding: one char per route into a fixed buffer, then ONE
-     * line summarizing all routes, plus up to 3 lines naming the unpatched
-     * symbols. The earlier 40-line burst appeared to overflow the kernel
-     * message buffer during the publish callback — even the pre-existing
-     * on_publish IOLogs got dropped. Keep this quiet. */
-    /* Resolver tries EXACT match first, then falls back to PREFIX match.
-     * Prefix match accepts names that end with 'E' (Itanium C++ ABI nested-name
-     * delimiter) so consumers can pass just "class::method" without paramSig.
-     * The typedef-vs-underlying-type footgun goes away. */
-    enum class ResolveWhere { Unresolved, Primary, Fallback };
-    auto resolve = [&](const char *sym, ResolveWhere &where) -> uint64_t {
-        uint64_t a = macho_find_symbol(km, sym);
-        if (a) { where = ResolveWhere::Primary; return a; }
-        if (km_fallback && km_fallback != km) {
-            a = macho_find_symbol(km_fallback, sym);
-            if (a) { where = ResolveWhere::Fallback; return a; }
+    /* Resolve a mangled name: walk the caller-specified kext chain
+     * (kext_bundle_ids[0..]) in order. Primary is element 0 — derived-class
+     * overrides live there. Subsequent entries express inheritance upward
+     * (e.g. AppleParavirtGPU → IOAcceleratorFamily2 → IOGraphicsFamily),
+     * tried only if earlier ones miss. Targeted lookup avoids scanning all
+     * 60+ kmods on every publish, which was flooding IOLog and panicking
+     * mid-callback. Max MAX_FALLBACK_CHAIN entries past primary. */
+    static const int MAX_FALLBACK_CHAIN = 6;
+    kmod_info_t *km_chain[MAX_FALLBACK_CHAIN + 1];  /* [0]=primary, [1..]=fallbacks */
+    int km_chain_len = 0;
+    km_chain[km_chain_len++] = km;  /* primary already resolved above */
+    for (int i = 1; st->kext_bundle_ids[i] && km_chain_len <= MAX_FALLBACK_CHAIN; i++) {
+        kmod_info_t *f = find_kmod(st->kext_bundle_ids[i]);
+        if (f && f != km) km_chain[km_chain_len++] = f;
+    }
+    {
+        char chain_desc[192]; int co = 0;
+        for (int i = 0; i < km_chain_len && co < (int)sizeof(chain_desc) - 32; i++) {
+            co += snprintf(chain_desc + co, sizeof(chain_desc) - co,
+                           "%s%s(%p)", i ? " → " : "",
+                           km_chain[i] ? km_chain[i]->name : "nil",
+                           km_chain[i]);
         }
-        size_t len = strlen(sym);
-        if (len > 0 && sym[len - 1] == 'E') {
-            a = macho_find_symbol_by_prefix(km, sym);
-            if (a) { where = ResolveWhere::Primary; return a; }
-            if (km_fallback && km_fallback != km) {
-                a = macho_find_symbol_by_prefix(km_fallback, sym);
-                if (a) { where = ResolveWhere::Fallback; return a; }
-            }
-        }
-        where = ResolveWhere::Unresolved;
-        return 0;
-    };
+        IOLog("%s: resolution chain: %s\n", kLog, chain_desc);
+    }
+    /* Per-route resolution is inlined below: tries EXACT match across the
+     * chain, then PREFIX match (names ending in Itanium 'E' nested-name
+     * delimiter) also across the chain. This kills the
+     * typedef-vs-underlying-type footgun. Diagnostics are kept to one
+     * summary line + gap names, since a 40-line burst was overflowing the
+     * kernel message buffer during the publish callback. */
 
     /* per-route status chars: P=primary+patched, F=fallback+patched,
-     * u=primary+no-slot, f=fallback+no-slot, X=unresolved. */
+     * u=primary+no-slot, f=fallback+no-slot, X=unresolved. 'F'/'f' cover
+     * any chain entry past primary — we don't distinguish which link. */
     char status[64];
     bzero(status, sizeof(status));
     int n = st->route_count;
@@ -158,8 +156,21 @@ on_publish(void *target, void *refCon, IOService *newService, IONotifier *notifi
     int patched = 0;
     for (int i = 0; i < n; i++) {
         auto &r = st->routes[i];
-        ResolveWhere where = ResolveWhere::Unresolved;
-        uint64_t method_addr = resolve(r.method_mangled, where);
+        int where_idx = -1;  /* 0=primary, 1..=fallback link */
+        uint64_t method_addr = 0;
+        for (int k = 0; k < km_chain_len && !method_addr; k++) {
+            method_addr = macho_find_symbol(km_chain[k], r.method_mangled);
+            if (method_addr) where_idx = k;
+        }
+        if (!method_addr) {
+            size_t len = strlen(r.method_mangled);
+            if (len > 0 && r.method_mangled[len - 1] == 'E') {
+                for (int k = 0; k < km_chain_len && !method_addr; k++) {
+                    method_addr = macho_find_symbol_by_prefix(km_chain[k], r.method_mangled);
+                    if (method_addr) where_idx = k;
+                }
+            }
+        }
         if (!method_addr) { status[i] = 'X'; continue; }
         bool slot_found = false;
         for (size_t s = 0; s < COPY_BYTES / sizeof(void *); s++) {
@@ -172,8 +183,8 @@ on_publish(void *target, void *refCon, IOService *newService, IONotifier *notifi
             }
         }
         status[i] = slot_found
-            ? (where == ResolveWhere::Primary ? 'P' : 'F')
-            : (where == ResolveWhere::Primary ? 'u' : 'f');
+            ? (where_idx == 0 ? 'P' : 'F')
+            : (where_idx == 0 ? 'u' : 'f');
     }
 
     *(void ***)newService = new_vtable;
@@ -245,7 +256,7 @@ on_publish(void *target, void *refCon, IOService *newService, IONotifier *notifi
 
 int
 notify_register_publish(const char *class_name,
-                        const char *kext_bundle_id,
+                        const char *const *kext_bundle_ids,
                         mp_pending_publish_route_t *routes,
                         int route_count)
 {
@@ -253,10 +264,14 @@ notify_register_publish(const char *class_name,
         IOLog("%s: too many notifiers (max %d)\n", kLog, MAX_NOTIFIERS);
         return -1;
     }
+    if (!kext_bundle_ids || !kext_bundle_ids[0]) {
+        IOLog("%s: kext_bundle_ids must have a non-NULL primary at [0]\n", kLog);
+        return -4;
+    }
 
     notifier_state *st = &g_notifiers[g_notifier_count];
     st->class_name = class_name;
-    st->kext_bundle_id = kext_bundle_id;
+    st->kext_bundle_ids = kext_bundle_ids;
     st->routes = routes;
     st->route_count = route_count;
     st->instances_patched = 0;

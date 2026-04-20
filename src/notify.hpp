@@ -32,8 +32,12 @@ typedef struct mp_pending_publish_route {
  * matching IOService is created, walk its vtable and patch the slots for
  * each pending route whose kext we can find via macho_find_symbol.
  *
+ * kext_bundle_ids is a NULL-terminated array: element 0 is primary
+ * (required), subsequent entries are additional kexts to try in order
+ * when primary lookup misses. Pass {primary, NULL} for no fallback.
+ *
  * Returns 0 on success (notifier registered), negative on error. */
 int notify_register_publish(const char *class_name,
-                            const char *kext_bundle_id,
+                            const char *const *kext_bundle_ids,
                             mp_pending_publish_route_t *routes,
                             int route_count);
