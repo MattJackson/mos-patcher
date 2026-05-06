@@ -44,7 +44,7 @@ This project exposes runtime diagnostics via ioreg properties (`MPMethodsHooked`
 - Commit subject: imperative, under 70 characters.
 - Body: explain the *why*. Reference ioreg properties or tests that verify the change.
 - No personal paths, no credentials, no internal domain references.
-- `Co-Authored-By:` trailers are welcome for pair-programming / agent-assisted work.
+- No AI attribution trailers (`Co-Authored-By: Claude`, etc.). Pair-programming and agent-assisted work are welcome — commits land under the human author's name only.
 
 ## License
 
