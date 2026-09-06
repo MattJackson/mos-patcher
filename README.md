@@ -1,5 +1,7 @@
 # mos-patcher
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=github-sponsors)](https://github.com/sponsors/MattJackson)
+
 [![Release](https://img.shields.io/github/v/release/MattJackson/mos-patcher?display_name=tag&sort=semver)](https://github.com/MattJackson/mos-patcher/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
