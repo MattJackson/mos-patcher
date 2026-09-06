@@ -48,4 +48,4 @@ This project exposes runtime diagnostics via ioreg properties (`MPMethodsHooked`
 
 ## License
 
-AGPL-3.0. See `LICENSE`. Network use counts as distribution.
+MIT. See `LICENSE`.
