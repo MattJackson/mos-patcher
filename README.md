@@ -1,5 +1,8 @@
 # mos-patcher
 
+[![Release](https://img.shields.io/github/v/release/MattJackson/mos-patcher?display_name=tag&sort=semver)](https://github.com/MattJackson/mos-patcher/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A Lilu-style kernel-extension hook framework for macOS 15 (Sequoia),
 built around the only patching mechanism that survives Sequoia's
 hardened `__DATA_CONST`: **per-instance vtable swap via IOService
@@ -348,8 +351,20 @@ end-to-end on Sequoia in our VM environment:
 - [mos-docs overview — project status](https://github.com/MattJackson/mos-docs/blob/main/overview/project-status.md)
   — current milestone, what works today
 
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+guidelines, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for the code
+of conduct.
+
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+## Changelog
+
+Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
-[GNU AGPL-3.0](LICENSE). Network use counts as distribution — anyone
-who runs this code as part of a service must offer the source to
-its users.
+[MIT](LICENSE) © 2026 Matthew Jackson.

@@ -16,4 +16,4 @@ A minimal kernel-function-hook framework for macOS. Built as a Lilu replacement 
 
 ## License
 
-AGPL-3.0. Network use counts as distribution.
+MIT.
